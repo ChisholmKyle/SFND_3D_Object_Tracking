@@ -126,7 +126,7 @@ void show3DObjects(std::vector<BoundingBox> &boundingBoxes, cv::Size worldSize, 
     // plot distance markers
     float lineSpacing = 2.0; // gap between distance markers
     int nMarkers = floor(worldSize.height / lineSpacing);
-    for (size_t i = 0; i < nMarkers; ++i)
+    for (int i = 0; i < nMarkers; ++i)
     {
         int y = (-(i * lineSpacing) * imageSize.height / worldSize.height) + imageSize.height;
         cv::line(topviewImg, cv::Point(0, y), cv::Point(imageSize.width, y), cv::Scalar(255, 0, 0));
@@ -146,14 +146,138 @@ void show3DObjects(std::vector<BoundingBox> &boundingBoxes, cv::Size worldSize, 
 // associate a given bounding box with the keypoints it contains
 void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPoint> &kptsCurr, std::vector<cv::DMatch> &kptMatches)
 {
-    // ...
+    // NOTE: Filtering Keypoints is done based on mean distRatio inside computeTTCCamera instead of
+    //       Euclidean distance here in order to save processing time
+
+    vector<double> meanDistRatios;
+    // vector<double> euclideanDistances;
+    for (auto match = kptMatches.begin(); match != kptMatches.end() ; ++match) {
+        // current image match keypoint
+        cv::KeyPoint &currKeypoint = kptsCurr[match->trainIdx];
+        if (boundingBox.roi.contains(currKeypoint.pt))
+        {
+            boundingBox.kptMatches.push_back(*match);
+        }
+    }
+
 }
 
 // Compute time-to-collision (TTC) based on keypoint correspondences in successive images
 void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPoint> &kptsCurr,
                       std::vector<cv::DMatch> kptMatches, double frameRate, double &TTC, cv::Mat *visImg)
 {
-    // ...
+    // minimum separation distance between keypoints in bounding box
+    const double minDist = 100.0;
+    // minimum number of viable keypoints per match
+    const int minKeypointCount = 2;
+    // accept inliers only within standard deviations from the mean distRatio
+    const double distRatioStddevFromMean = 1.7;
+    // minimum ratio of inliers to total match keypoints in order to accept match
+    const double inliersToKeypoints = 0.6;
+
+    // get stats on distance ratios for all matches inside bounding box
+    // compute distance ratios between all matched keypoints
+    vector<vector<double>> distRatios;
+    // total distance ratios calculated
+    int countDistRatios = 0;
+    // mean for each match
+    vector<double> meanDistRatios;
+    for (auto match = kptMatches.begin(); match != kptMatches.end() ; ++match) {
+
+        // previous and current image match keypoint
+        cv::KeyPoint &prevKeypoint = kptsPrev[match->queryIdx];
+        cv::KeyPoint &currKeypoint = kptsCurr[match->trainIdx];
+
+        vector<double> matchDistRatios;
+        for (auto matchTest = kptMatches.begin(); matchTest != kptMatches.end() ; ++matchTest) {
+            if (matchTest == match) continue;
+
+            cv::KeyPoint &prevTestKeypoint = kptsPrev[matchTest->queryIdx];
+            cv::KeyPoint &currTestKeypoint = kptsCurr[matchTest->trainIdx];
+
+            const double distCurr = cv::norm(currKeypoint.pt - currTestKeypoint.pt);
+            const double distPrev = cv::norm(prevKeypoint.pt - prevTestKeypoint.pt);
+
+            if (distPrev > std::numeric_limits<double>::epsilon() && distCurr >= minDist) {
+                double distRatio = distCurr / distPrev;
+                matchDistRatios.push_back(distRatio);
+            }
+        }
+
+        // save distance ratio data for current match keypoint
+        if (matchDistRatios.size() > minKeypointCount) {
+            // add vector of distance ratios for current match
+            distRatios.push_back(matchDistRatios);
+            // count distance ratios
+            countDistRatios += matchDistRatios.size();
+            // mean for current match
+            double meanDistRatio = std::accumulate(matchDistRatios.begin(), matchDistRatios.end(), 0.0) / matchDistRatios.size();
+            meanDistRatios.push_back(meanDistRatio);
+        }
+    }
+
+    // not enough viable matches
+    if (countDistRatios < 2) {
+        TTC = NAN;
+        return;
+    }
+
+    // get mean for all distance ratios
+    double meanDistRatio = 0.0;
+    for (size_t k = 0; k < meanDistRatios.size(); ++k) {
+        meanDistRatio += meanDistRatios[k] * distRatios[k].size() / countDistRatios;
+    }
+
+    // get stddev for all distance ratios
+    double sseDistRatio = 0.0;
+    for (auto matchRatios = distRatios.begin() ; matchRatios != distRatios.end(); ++matchRatios) {
+        for (auto ratio = matchRatios->begin() ; ratio != matchRatios->end(); ++ratio) {
+            const double err = (*ratio) - meanDistRatio;
+            sseDistRatio += (err * err);
+        }
+    }
+    const double stddevDistRatio = std::sqrt(sseDistRatio / (countDistRatios - 1));
+
+    // filter out distance ratios and calculate final mean
+    const double maxDistRatio = meanDistRatio + distRatioStddevFromMean * stddevDistRatio;
+    const double minDistRatio = meanDistRatio - distRatioStddevFromMean * stddevDistRatio;
+    // total count and sum of distance ratios
+    int finalCount = 0;
+    double finalSum = 0.0;
+    for (const auto &matchRatios : distRatios) {
+        // count inliers and sum for match
+        int countInliers = 0;
+        double sumRatios = 0.0;
+        for (const auto ratio : matchRatios) {
+            if (ratio < maxDistRatio && ratio > minDistRatio) {
+                countInliers++;
+                sumRatios += ratio;
+            }
+        }
+        // check if match should be used - minimum keypoints and inliers ratio test
+        if (countInliers > minKeypointCount &&
+            (static_cast<double>(countInliers) / static_cast<double>(matchRatios.size())) > inliersToKeypoints) {
+            finalSum += sumRatios;
+            finalCount += countInliers;
+        }
+    }
+
+    if (finalCount == 0) {
+        TTC = NAN;
+        return;
+    }
+
+    // finally, mean distance ratio
+    const double distRatio = finalSum / static_cast<double>(finalCount);
+
+    if (std::fabs(1.0 - distRatio) < std::numeric_limits<double>::epsilon()) {
+        TTC = NAN;
+        return;
+    }
+
+    double dT = 1 / frameRate;
+    TTC = -dT / (1 - distRatio);
+
 }
 
 static void lidarXMeanStddev(std::vector<LidarPoint> &points, double &mean, double &stddev)
@@ -222,11 +346,11 @@ std::vector<LidarPoint> computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev
     }
 
     // compute TTC from both measurements
-    if (minXPrev > (minXCurr + 1e-9)) {
-        TTC = minXCurr * dT / (minXPrev - minXCurr);
+    if (std::fabs(minXPrev - minXCurr) < std::numeric_limits<double>::epsilon()) {
+        // car is standing still
+        TTC = NAN;
     } else {
-        // car is standing still or moving away
-        TTC = -1.0;
+        TTC = minXCurr * dT / (minXPrev - minXCurr);
     }
 
     return outliers;
@@ -258,9 +382,21 @@ void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bb
                 // go through each bounding box in current image
                 for (auto currBB = currFrame.boundingBoxes.begin(); currBB != currFrame.boundingBoxes.end(); ++currBB)
                 {
+                    // roi should containe entire keypoint
+                    if (currBB->roi.width <= currKeypoint.size ||
+                        currBB->roi.height <= currKeypoint.size) {
+                        continue;
+                    }
+
+                    // shrink ROI by size of keypoint size
+                    cv::Rect smallerBox;
+                    smallerBox.x = currBB->roi.x + currKeypoint.size / 2.0;
+                    smallerBox.y = currBB->roi.y + currKeypoint.size / 2.0;
+                    smallerBox.width = currBB->roi.width - currKeypoint.size;
+                    smallerBox.height = currBB->roi.height - currKeypoint.size;
 
                     // check wether point is within current bounding box
-                    if (currBB->roi.contains(currKeypoint.pt))
+                    if (smallerBox.contains(currKeypoint.pt))
                     {
                         // add box IDs to count map
                         const int prevID = prevBB->boxID;
