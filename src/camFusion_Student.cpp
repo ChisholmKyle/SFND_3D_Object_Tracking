@@ -150,11 +150,29 @@ void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint
     //       Euclidean distance here in order to save processing time
 
     vector<double> meanDistRatios;
+    boundingBox.kptMatches.clear();
     // vector<double> euclideanDistances;
     for (auto match = kptMatches.begin(); match != kptMatches.end() ; ++match) {
-        // current image match keypoint
+
+        // image match keypoints
+        cv::KeyPoint &prevKeypoint = kptsPrev[match->queryIdx];
         cv::KeyPoint &currKeypoint = kptsCurr[match->trainIdx];
-        if (boundingBox.roi.contains(currKeypoint.pt))
+
+        // roi should containe entire keypoint
+        if (boundingBox.roi.width <= currKeypoint.size ||
+            boundingBox.roi.height <= currKeypoint.size) {
+            continue;
+        }
+
+        // shrink ROI by size of keypoint size
+        cv::Rect smallerBox;
+        smallerBox.x = boundingBox.roi.x + currKeypoint.size / 2.0;
+        smallerBox.y = boundingBox.roi.y + currKeypoint.size / 2.0;
+        smallerBox.width = boundingBox.roi.width - currKeypoint.size;
+        smallerBox.height = boundingBox.roi.height - currKeypoint.size;
+
+        // check wether point is within current bounding box
+        if (smallerBox.contains(currKeypoint.pt) && boundingBox.roi.contains(prevKeypoint.pt))
         {
             boundingBox.kptMatches.push_back(*match);
         }
@@ -163,9 +181,12 @@ void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint
 }
 
 // Compute time-to-collision (TTC) based on keypoint correspondences in successive images
-void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPoint> &kptsCurr,
+std::vector<cv::KeyPoint> computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPoint> &kptsCurr,
                       std::vector<cv::DMatch> kptMatches, double frameRate, double &TTC, cv::Mat *visImg)
 {
+    // filtered keypoints
+    std::vector<cv::KeyPoint> ttcKeypoints;
+
     // minimum separation distance between keypoints in bounding box
     const double minDist = 100.0;
     // minimum number of viable keypoints per match
@@ -182,6 +203,8 @@ void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPo
     int countDistRatios = 0;
     // mean for each match
     vector<double> meanDistRatios;
+    // matches corresponding to distRatios vector
+    std::vector<std::vector<cv::DMatch>::iterator> matchIndices;
     for (auto match = kptMatches.begin(); match != kptMatches.end() ; ++match) {
 
         // previous and current image match keypoint
@@ -206,6 +229,8 @@ void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPo
 
         // save distance ratio data for current match keypoint
         if (matchDistRatios.size() > minKeypointCount) {
+            // match index
+            matchIndices.push_back(match);
             // add vector of distance ratios for current match
             distRatios.push_back(matchDistRatios);
             // count distance ratios
@@ -219,7 +244,7 @@ void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPo
     // not enough viable matches
     if (countDistRatios < 2) {
         TTC = NAN;
-        return;
+        return {};
     }
 
     // get mean for all distance ratios
@@ -244,7 +269,9 @@ void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPo
     // total count and sum of distance ratios
     int finalCount = 0;
     double finalSum = 0.0;
-    for (const auto &matchRatios : distRatios) {
+    for (size_t k = 0; k < distRatios.size(); ++k) {
+        // current match ratios vector
+        const auto &matchRatios = distRatios[k];
         // count inliers and sum for match
         int countInliers = 0;
         double sumRatios = 0.0;
@@ -259,12 +286,14 @@ void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPo
             (static_cast<double>(countInliers) / static_cast<double>(matchRatios.size())) > inliersToKeypoints) {
             finalSum += sumRatios;
             finalCount += countInliers;
+            // ok keypoint - add to return list
+            ttcKeypoints.push_back(kptsCurr[matchIndices[k]->trainIdx]);
         }
     }
 
     if (finalCount == 0) {
         TTC = NAN;
-        return;
+        return {};
     }
 
     // finally, mean distance ratio
@@ -272,12 +301,13 @@ void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPo
 
     if (std::fabs(1.0 - distRatio) < std::numeric_limits<double>::epsilon()) {
         TTC = NAN;
-        return;
+        return {};
     }
 
     double dT = 1 / frameRate;
     TTC = -dT / (1 - distRatio);
 
+    return ttcKeypoints;
 }
 
 static void lidarXMeanStddev(std::vector<LidarPoint> &points, double &mean, double &stddev)
