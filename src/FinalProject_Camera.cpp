@@ -139,14 +139,6 @@ int main(int argc, const char *argv[])
         float shrinkFactor = 0.10; // shrinks each bounding box by the given percentage to avoid 3D object merging at the edges of an ROI
         clusterLidarWithROI((dataBuffer.end()-1)->boundingBoxes, (dataBuffer.end() - 1)->lidarPoints, shrinkFactor, P_rect_00, R_rect_00, RT);
 
-        // Visualize 3D objects
-        bVis = true;
-        if(bVis)
-        {
-            show3DObjects((dataBuffer.end()-1)->boundingBoxes, cv::Size(4.0, 20.0), cv::Size(2000, 2000), true);
-        }
-        bVis = false;
-
         cout << "#4 : CLUSTER LIDAR POINT CLOUD done" << endl;
 
         /* DETECT IMAGE KEYPOINTS */
@@ -284,8 +276,18 @@ int main(int argc, const char *argv[])
                     //// STUDENT ASSIGNMENT
                     //// TASK FP.2 -> compute time-to-collision based on Lidar data (implement -> computeTTCLidar)
                     double ttcLidar;
-                    computeTTCLidar(prevBB->lidarPoints, currBB->lidarPoints, sensorFrameRate, ttcLidar);
+                    std::vector<LidarPoint> outliers = computeTTCLidar(prevBB->lidarPoints, currBB->lidarPoints, sensorFrameRate, ttcLidar);
                     //// EOF STUDENT ASSIGNMENT
+
+                    // Visualize 3D objects
+                    bVis = true;
+                    if(bVis)
+                    {
+                        // only show current BB
+                        std::vector<BoundingBox> visBB = std::vector<BoundingBox>({*currBB});
+                        show3DObjects(visBB, cv::Size(4.0, 20.0), cv::Size(2000, 2000), outliers, true);
+                    }
+                    bVis = false;
 
                     //// STUDENT ASSIGNMENT
                     //// TASK FP.3 -> assign enclosed keypoint matches to bounding box (implement -> clusterKptMatchesWithROI)
