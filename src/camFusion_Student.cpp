@@ -12,8 +12,11 @@
 using namespace std;
 
 // Create groups of Lidar points whose projection into the camera falls into the same bounding box
-void clusterLidarWithROI(std::vector<BoundingBox> &boundingBoxes, std::vector<LidarPoint> &lidarPoints, float shrinkFactor, cv::Mat &P_rect_xx, cv::Mat &R_rect_xx, cv::Mat &RT)
+void clusterLidarWithROI(std::vector<BoundingBox> &boundingBoxes, std::vector<LidarPoint> &lidarPoints, float shrinkFactor, cv::Mat &P_rect_xx, cv::Mat &R_rect_xx, cv::Mat &RT, double &duration)
 {
+    // time task
+    double t = (double)cv::getTickCount();
+
     // loop over all Lidar points and associate them to a 2D bounding box
     cv::Mat X(4, 1, cv::DataType<double>::type);
     cv::Mat Y(3, 1, cv::DataType<double>::type);
@@ -58,9 +61,13 @@ void clusterLidarWithROI(std::vector<BoundingBox> &boundingBoxes, std::vector<Li
         }
 
     } // eof loop over all Lidar points
+
+    t = ((double)cv::getTickCount() - t) / cv::getTickFrequency();
+    duration = 1000 * t / 1.0;
+
 }
 
-void show3DObjects(std::vector<BoundingBox> &boundingBoxes, cv::Size worldSize, cv::Size imageSize, const std::vector<LidarPoint> &outliers, bool bWait)
+void show3DObjects(std::vector<BoundingBox> &boundingBoxes, cv::Size worldSize, cv::Size imageSize, const std::vector<LidarPoint> &outliers, const MatchingParameters &parameters, const std::string &imgPrefix)
 {
     // create topview image
     cv::Mat topviewImg(imageSize, CV_8UC3, cv::Scalar(255, 255, 255));
@@ -132,22 +139,27 @@ void show3DObjects(std::vector<BoundingBox> &boundingBoxes, cv::Size worldSize, 
         cv::line(topviewImg, cv::Point(0, y), cv::Point(imageSize.width, y), cv::Scalar(255, 0, 0));
     }
 
-    // display image
-    string windowName = "3D Objects";
-    cv::namedWindow(windowName, 1);
-    cv::imshow(windowName, topviewImg);
+    if (parameters.saveImage) {
+        cv::imwrite(imgPrefix + "_topview.png", topviewImg);
+    }
 
-    if (bWait)
-    {
+    if (parameters.showImage) {
+        // display image
+        string windowName = "3D Objects";
+        cv::namedWindow(windowName, 1);
+        cv::imshow(windowName, topviewImg);
         cv::waitKey(0); // wait for key to be pressed
     }
 }
 
 // associate a given bounding box with the keypoints it contains
-void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPoint> &kptsCurr, std::vector<cv::DMatch> &kptMatches)
+void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPoint> &kptsCurr, std::vector<cv::DMatch> &kptMatches, double &duration)
 {
     // NOTE: Filtering Keypoints is done based on mean distRatio inside computeTTCCamera instead of
     //       Euclidean distance here in order to save processing time
+
+    // time task
+    double t = (double)cv::getTickCount();
 
     vector<double> meanDistRatios;
     boundingBox.kptMatches.clear();
@@ -178,12 +190,17 @@ void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint
         }
     }
 
+    t = ((double)cv::getTickCount() - t) / cv::getTickFrequency();
+    duration = 1000 * t / 1.0;
 }
 
 // Compute time-to-collision (TTC) based on keypoint correspondences in successive images
 std::vector<cv::KeyPoint> computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPoint> &kptsCurr,
-                      std::vector<cv::DMatch> kptMatches, double frameRate, double &TTC, cv::Mat *visImg)
+                      std::vector<cv::DMatch> kptMatches, double frameRate, double &TTC, double &duration)
 {
+    // time task
+    double t = (double)cv::getTickCount();
+
     // filtered keypoints
     std::vector<cv::KeyPoint> ttcKeypoints;
 
@@ -307,6 +324,9 @@ std::vector<cv::KeyPoint> computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, 
     double dT = 1 / frameRate;
     TTC = -dT / (1 - distRatio);
 
+    t = ((double)cv::getTickCount() - t) / cv::getTickFrequency();
+    duration = 1000 * t / 1.0;
+
     return ttcKeypoints;
 }
 
@@ -341,8 +361,11 @@ static void lidarXMeanStddev(std::vector<LidarPoint> &points, double &mean, doub
 }
 
 std::vector<LidarPoint> computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev,
-                     std::vector<LidarPoint> &lidarPointsCurr, double frameRate, double &TTC)
+                     std::vector<LidarPoint> &lidarPointsCurr, double frameRate, double &TTC, double &duration)
 {
+    // time task
+    double t = (double)cv::getTickCount();
+
     // current outliers
     std::vector<LidarPoint> outliers;
 
@@ -383,10 +406,13 @@ std::vector<LidarPoint> computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev
         TTC = minXCurr * dT / (minXPrev - minXCurr);
     }
 
+    t = ((double)cv::getTickCount() - t) / cv::getTickFrequency();
+    duration = 1000 * t / 1.0;
+
     return outliers;
 }
 
-void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bbBestMatches, DataFrame &prevFrame, DataFrame &currFrame)
+void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bbBestMatches, DataFrame &prevFrame, DataFrame &currFrame, double &duration)
 {
     // count number of matches inside bounding boxes
     // Data structure:
@@ -395,6 +421,8 @@ void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bb
     // }
     std::map<int, std::map<int, int>> countMap;
 
+    // time task
+    double t = (double)cv::getTickCount();
     // loop over all matches and associate them to a 2D bounding box
     for (auto match = matches.begin(); match != matches.end(); ++match)
     {
@@ -472,4 +500,7 @@ void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bb
         }
         bbBestMatches.insert({prevID, bestCurrID});
     }
+
+    t = ((double)cv::getTickCount() - t) / cv::getTickFrequency();
+    duration = 1000 * t / 1.0;
 }

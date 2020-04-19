@@ -42,7 +42,7 @@ void matchDescriptors(std::vector<cv::KeyPoint> &kPtsSource, std::vector<cv::Key
     { // k nearest neighbors (k=2)
         std::vector<std::vector<cv::DMatch>> knnMatches;
         matcher->knnMatch(descSource, descRef, knnMatches, 2);
-        for (int k = 0; k < knnMatches.size(); ++k)
+        for (size_t k = 0; k < knnMatches.size(); ++k)
         {
             // ssd ratio
             const float ratio = knnMatches[k][0].distance / knnMatches[k][1].distance;

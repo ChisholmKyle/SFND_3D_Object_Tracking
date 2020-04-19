@@ -11,9 +11,9 @@ using namespace std;
 // remove Lidar points based on min. and max distance in X, Y and Z
 void cropLidarPoints(std::vector<LidarPoint> &lidarPoints, float minX, float maxX, float maxY, float minZ, float maxZ, float minR)
 {
-    std::vector<LidarPoint> newLidarPts; 
+    std::vector<LidarPoint> newLidarPts;
     for(auto it=lidarPoints.begin(); it!=lidarPoints.end(); ++it) {
-        
+
        if( (*it).x>=minX && (*it).x<=maxX && (*it).z>=minZ && (*it).z<=maxZ && (*it).z<=0.0 && abs((*it).y)<=maxY && (*it).r>=minR )  // Check if Lidar point is outside of boundaries
        {
            newLidarPts.push_back(*it);
@@ -29,21 +29,21 @@ void cropLidarPoints(std::vector<LidarPoint> &lidarPoints, float minX, float max
 void loadLidarFromFile(vector<LidarPoint> &lidarPoints, string filename)
 {
     // allocate 4 MB buffer (only ~130*4*4 KB are needed)
-    unsigned long num = 1000000;
+    size_t num = 1000000;
     float *data = (float*)malloc(num*sizeof(float));
-    
+
     // pointers
     float *px = data+0;
     float *py = data+1;
     float *pz = data+2;
     float *pr = data+3;
-    
+
     // load point cloud
     FILE *stream;
     stream = fopen (filename.c_str(),"rb");
     num = fread(data,sizeof(float),num,stream)/4;
- 
-    for (int32_t i=0; i<num; i++) {
+
+    for (size_t i=0; i<num; i++) {
         LidarPoint lpt;
         lpt.x = *px; lpt.y = *py; lpt.z = *pz; lpt.r = *pr;
         lidarPoints.push_back(lpt);
@@ -73,7 +73,7 @@ void showLidarTopview(std::vector<LidarPoint> &lidarPoints, cv::Size worldSize, 
     // plot distance markers
     float lineSpacing = 2.0; // gap between distance markers
     int nMarkers = floor(worldSize.height / lineSpacing);
-    for (size_t i = 0; i < nMarkers; ++i)
+    for (int i = 0; i < nMarkers; ++i)
     {
         int y = (-(i * lineSpacing) * imageSize.height / worldSize.height) + imageSize.height;
         cv::line(topviewImg, cv::Point(0, y), cv::Point(imageSize.width, y), cv::Scalar(255, 0, 0));
@@ -92,11 +92,11 @@ void showLidarTopview(std::vector<LidarPoint> &lidarPoints, cv::Size worldSize, 
 void showLidarImgOverlay(cv::Mat &img, std::vector<LidarPoint> &lidarPoints, cv::Mat &P_rect_xx, cv::Mat &R_rect_xx, cv::Mat &RT, cv::Mat *extVisImg)
 {
     // init image for visualization
-    cv::Mat visImg; 
+    cv::Mat visImg;
     if(extVisImg==nullptr)
     {
         visImg = img.clone();
-    } else 
+    } else
     {
         visImg = *extVisImg;
     }
@@ -104,7 +104,7 @@ void showLidarImgOverlay(cv::Mat &img, std::vector<LidarPoint> &lidarPoints, cv:
     cv::Mat overlay = visImg.clone();
 
     // find max. x-value
-    double maxVal = 0.0; 
+    double maxVal = 0.0;
     for(auto it=lidarPoints.begin(); it!=lidarPoints.end(); ++it)
     {
         maxVal = maxVal<it->x ? it->x : maxVal;
