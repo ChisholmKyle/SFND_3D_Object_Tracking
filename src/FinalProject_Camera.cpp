@@ -413,29 +413,29 @@ int main(int argc, const char *argv[])
 
     /* INIT VARIABLES */
 
-    // const bool showImage = false;
-    // const bool saveImage = true;
-    // std::vector<std::string> keypointDetectorList =
-    //     {"BRISK", "SIFT"};
-    // std::vector<std::string> keypointDescriptorList =
-    //     {"BRISK", "BRIEF", "SIFT"};
-    // const bool testAKAZE = false;
-
-    // show and/or save images
     const bool showImage = false;
-    const bool saveImage = false;
-    // test data tables
+    const bool saveImage = true;
     std::vector<std::string> keypointDetectorList =
-        {"SHITOMASI", "HARRIS", "FAST", "BRISK", "ORB", "AKAZE", "SIFT"};
+        {"FAST", "SIFT"};
     std::vector<std::string> keypointDescriptorList =
-        {"BRISK", "BRIEF", "ORB", "FREAK", "SIFT"};
-    const bool testAKAZE = true;
+        {"BRISK", "BRIEF", "SIFT"};
+    const bool testAKAZE = false;
+
+    // // show and/or save images
+    // const bool showImage = false;
+    // const bool saveImage = false;
+    // // test data tables
+    // std::vector<std::string> keypointDetectorList =
+    //     {"SHITOMASI", "HARRIS", "FAST", "BRISK", "ORB", "AKAZE", "SIFT"};
+    // std::vector<std::string> keypointDescriptorList =
+    //     {"BRISK", "BRIEF", "ORB", "FREAK", "SIFT"};
+    // const bool testAKAZE = true;
 
     // timestamp for results
     time_t t = std::time(0);
     struct tm *now = std::localtime(&t);
     char timeString[80];
-    std::strftime(timeString, 80, "%Y-%m-%d_%Hh%mm%Ss", now);
+    std::strftime(timeString, 80, "%Y-%m-%d_%Hh%Mm%Ss", now);
     std::string resultsFolder = "results_" + std::string(timeString) + "/";
 
     // Creating results directory
