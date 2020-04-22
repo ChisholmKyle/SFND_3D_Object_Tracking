@@ -140,7 +140,11 @@ void show3DObjects(std::vector<BoundingBox> &boundingBoxes, cv::Size worldSize, 
     }
 
     if (parameters.saveImage) {
-        cv::imwrite(imgPrefix + "_topview.png", topviewImg);
+        cv::Point2i pt0 = cv::Point2i(400, 1000);
+        cv::Point2i pt1 = cv::Point2i(1600, 1700);
+        cv::Rect cropROI = cv::Rect(pt0, pt1);
+        cv::Mat croppedImage = topviewImg(cropROI);
+        cv::imwrite(imgPrefix + "_topview.png", croppedImage);
     }
 
     if (parameters.showImage) {

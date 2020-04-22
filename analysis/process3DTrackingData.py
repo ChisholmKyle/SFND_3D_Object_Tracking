@@ -82,6 +82,32 @@ for case in case_image_durations:
     case_durations[case] = np.mean(case_image_durations[case])
 
 # %%
+# Lidar TTC plot
+
+# plot labels
+plot_title = "Image vs. Lidar TTC"
+plot_x_label = "Image number"
+plot_y_label = "Lidar TTC (s)"
+
+# plot data
+image_numbers = np.arange(1, num_images + 1)
+
+# line plot
+fig_lidar_ttc, ax = plt.subplots()
+
+# lidar
+for case in lidarTTC:
+    pline = ax.plot(image_numbers, lidarTTC[case], marker='o', label='Lidar', color='black', linewidth=2)[0]
+    # Every lidar case is exactly the same, so no need to show all of them
+    break
+
+ax.set_xticks(image_numbers)
+ax.set_ylabel(plot_y_label)
+ax.set_xlabel(plot_x_label)
+ax.set_title(plot_title)
+ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+
+# %%
 # Camera TTC plot
 
 # plot labels
@@ -90,7 +116,7 @@ plot_x_label = "Image number"
 plot_y_label = "TTC (s)"
 
 # plot data
-image_numbers = np.arange(0, num_images)
+image_numbers = np.arange(1, num_images+1)
 
 # line plot
 fig_ttc, ax = plt.subplots()
@@ -110,7 +136,7 @@ for case in cameraTTC:
             label = "{}-{}".format(detector, descriptor)
             ax.plot(image_numbers, cameraTTC[case], label=label)
 
-
+ax.set_xticks(image_numbers)
 ax.set_ylabel(plot_y_label)
 ax.set_xlabel(plot_x_label)
 ax.set_title(plot_title)
@@ -215,14 +241,18 @@ ax.set_title(plot_title)
 
 fprefix, _ = os.path.splitext(data_file)
 
+fig_lidar_ttc.set_size_inches(plot_size['width'], plot_size['height'])
 fig_ttc.set_size_inches(plot_size['width'], plot_size['height'])
 fig_duration_mesh.set_size_inches(plot_size['width'], plot_size['height'])
 
+fig_lidar_ttc.tight_layout()
 fig_ttc.tight_layout()
 fig_duration_mesh.tight_layout()
 
 print("Saving plots...")
 
+fig_lidar_ttc.savefig(fprefix + "_lidar_ttc.png",
+                       bbox_inches='tight', dpi=plot_size['dpi'])
 fig_ttc.savefig(fprefix + "_ttc.png",
                        bbox_inches='tight', dpi=plot_size['dpi'])
 fig_duration_mesh.savefig(fprefix + "_duration_mesh.png",

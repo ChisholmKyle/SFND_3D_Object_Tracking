@@ -154,8 +154,12 @@ static void GenerateTest(const MatchingParameters &parameters, const int testCas
 
         float confThreshold = 0.2;
         float nmsThreshold = 0.4;
+        double detectObjectsDurationMs = 0.0;
         detectObjects((dataBuffer.end() - 1)->cameraImg, (dataBuffer.end() - 1)->boundingBoxes, confThreshold, nmsThreshold,
-                      yoloBasePath, yoloClassesFile, yoloModelConfiguration, yoloModelWeights, bVis);
+                      yoloBasePath, yoloClassesFile, yoloModelConfiguration, yoloModelWeights, bVis, detectObjectsDurationMs);
+        // detection with yolo is too time-consuming to consider when comparing
+        // independent processing times for detector/descriptor
+        // result.processingTimeMs += detectObjectsDurationMs;
 
         cout << "#2 : DETECT & CLASSIFY OBJECTS done" << endl;
 
@@ -383,7 +387,11 @@ static void GenerateTest(const MatchingParameters &parameters, const int testCas
 
                         string windowName = "Final Results : TTC";
                         if (parameters.saveImage) {
-                            cv::imwrite(imgWritePrefix + "_cameraview.png", visImg);
+                            cv::Point2i pt1 = cv::Point2i(400, 120);
+                            cv::Point2i pt2 = cv::Point2i(850, 370);
+                            cv::Rect cropRoi = cv::Rect(pt1, pt2);
+                            cv::Mat croppedImg = visImg(cropRoi);
+                            cv::imwrite(imgWritePrefix + "_cameraview.png", croppedImg);
                         }
                         if (parameters.showImage) {
                             cv::namedWindow(windowName, 4);
@@ -413,23 +421,33 @@ int main(int argc, const char *argv[])
 
     /* INIT VARIABLES */
 
-    const bool showImage = false;
-    const bool saveImage = true;
-    std::vector<std::string> keypointDetectorList =
-        {"FAST", "SIFT"};
-    std::vector<std::string> keypointDescriptorList =
-        {"BRISK", "BRIEF", "SIFT"};
-    const bool testAKAZE = false;
+    // -------------------------------------------
+    // Save select images setup:
+    // -------------------------------------------
 
-    // // show and/or save images
     // const bool showImage = false;
-    // const bool saveImage = false;
-    // // test data tables
+    // const bool saveImage = true;
     // std::vector<std::string> keypointDetectorList =
-    //     {"SHITOMASI", "HARRIS", "FAST", "BRISK", "ORB", "AKAZE", "SIFT"};
+    //     {"FAST", "BRISK"};
     // std::vector<std::string> keypointDescriptorList =
-    //     {"BRISK", "BRIEF", "ORB", "FREAK", "SIFT"};
-    // const bool testAKAZE = true;
+    //     {"BRISK", "BRIEF", "SIFT", "ORB"};
+    // const bool testAKAZE = false;
+
+    // -------------------------------------------
+    // No saved images, all keypoint matching data:
+    // -------------------------------------------
+
+    // show and/or save images
+    const bool showImage = false;
+    const bool saveImage = false;
+    // test data tables
+    std::vector<std::string> keypointDetectorList =
+        {"SHITOMASI", "HARRIS", "FAST", "BRISK", "ORB", "AKAZE", "SIFT"};
+    std::vector<std::string> keypointDescriptorList =
+        {"BRISK", "BRIEF", "ORB", "FREAK", "SIFT"};
+    const bool testAKAZE = true;
+
+    // -------------------------------------------
 
     // timestamp for results
     time_t t = std::time(0);
